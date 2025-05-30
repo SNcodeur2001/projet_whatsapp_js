@@ -1,6 +1,17 @@
 import { createElement } from "./component.js";
 import { iconColors } from "./colors.js";
-import { appState, updateState, addContact, addGroup } from "./data.js";
+import { 
+  appState, 
+  updateState, 
+  addContact, 
+  addGroup, 
+  sendMessage,
+  sendBroadcastMessage,
+  messages,
+  login,
+  logout,
+  authState 
+} from "./data.js";
 import {
   archiveDiscussion,
   unarchiveDiscussion,
@@ -8,8 +19,11 @@ import {
   getContactById,
   getGroupById,
   addMembersToGroup,
+  removeMemberFromGroup,
+  toggleAdminStatus,
 } from "./utils.js";
 import {
+  createLoginForm,
   createDiscussionsList,
   createArchivesList,
   createContactForm,
@@ -19,6 +33,7 @@ import {
   createGroupDetails,
   createAddMemberForm,
   createDiffusionList,
+  createMessagesList
 } from "./views.js";
 
 // ===== GESTIONNAIRES D'ÉVÉNEMENTS =====
@@ -145,7 +160,48 @@ function handleAddMembers() {
 }
 
 function selectDiscussion(type, id) {
-  updateState({ selectedDiscussion: { type, id } });
+  // Mettre à jour l'état
+  updateState({ 
+    selectedDiscussion: { type, id },
+    currentView: "discussions"
+  });
+
+  // Afficher les détails de la discussion
+  const headerTitle = document.querySelector("#headerTitle");
+  const headerImage = document.querySelector("#headerImage");
+  const messagesContainer = document.querySelector("#corpsZoneMessage");
+  const messageInput = document.getElementById("messageInput");
+  const sendButton = document.querySelector("button[disabled]");
+  
+  const item = type === "contact" 
+    ? getContactById(id)
+    : getGroupById(id);
+
+  if (item) {
+    // Mettre à jour l'en-tête
+    if (headerTitle) headerTitle.textContent = item.nom;
+    if (headerImage) {
+      headerImage.style.backgroundImage = `url(${item.photo || "https://via.placeholder.com/40"})`;
+    }
+    
+    // Activer l'envoi de messages
+    if (messageInput) {
+      messageInput.disabled = false;
+      messageInput.focus();
+    }
+    if (sendButton) {
+      sendButton.disabled = false;
+    }
+    
+    // Afficher les messages
+    if (messagesContainer) {
+      messagesContainer.innerHTML = "";
+      const messagesList = createMessagesList(type, id);
+      messagesContainer.appendChild(messagesList);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  }
+
   updateHeaderActions();
 }
 
@@ -193,61 +249,73 @@ function showArchives() {
 }
 
 function showDiffusionList() {
-  updateState({ currentView: "diffusion" });
+  updateState({
+    currentView: "diffusion",
+  });
   updateDiscussionView();
 }
 
 function updateDiscussionView() {
-  const discussionContainer = document.getElementById("discussion");
-  discussionContainer.innerHTML = "";
+  const discussionContainer = document.querySelector("#discussion");
+  if (!discussionContainer) return;
 
-  let content;
+  discussionContainer.innerHTML = "";
 
   switch (appState.currentView) {
     case "discussions":
-      content = createDiscussionsList(selectDiscussion);
+      discussionContainer.appendChild(createDiscussionsList(selectDiscussion));
       break;
     case "archives":
-      content = createArchivesList(selectDiscussion, showDiscussions);
+      discussionContainer.appendChild(createArchivesList(selectDiscussion, showDiscussions));
       break;
     case "addContact":
-      content = createContactForm(handleSaveContact, showDiscussions);
+      discussionContainer.appendChild(createContactForm(handleSaveContact, showDiscussions));
       break;
     case "addGroup":
-      content = createGroupForm(handleSaveGroup, showGroupsList);
+      discussionContainer.appendChild(createGroupForm(handleSaveGroup, showGroupsList));
       break;
     case "contacts":
-      content = createContactsList(showDiscussions);
+      discussionContainer.appendChild(createContactsList(showDiscussions));
       break;
     case "groupes":
-      content = createGroupsList(
-        showDiscussions, // onBack
-        showGroupDetails, // onGroupSelect
-        showGroupForm // onCreateGroup - Ajout de cette fonction
+      discussionContainer.appendChild(
+        createGroupsList(
+          showDiscussions,      // onBack
+          showGroupDetails,     // onGroupSelect
+          showGroupForm,        // onCreateGroup
+          selectDiscussion      // Fonction de sélection pour les discussions
+        )
       );
       break;
     case "groupDetails":
-      content = createGroupDetails(
-        appState.selectedGroup,
-        showGroupsList,
-        showAddMemberForm
+      discussionContainer.appendChild(
+        createGroupDetails(
+          appState.selectedGroup,
+          showGroupsList,
+          showAddMemberForm
+        )
       );
       break;
     case "addMember":
-      content = createAddMemberForm(
-        appState.selectedGroup,
-        () => showGroupDetails(appState.selectedGroup),
-        handleAddMembers
+      discussionContainer.appendChild(
+        createAddMemberForm(
+          appState.selectedGroup,
+          () => showGroupDetails(appState.selectedGroup),
+          handleAddMembers
+        )
       );
       break;
     case "diffusion":
-      content = createDiffusionList(showDiscussions);
+      discussionContainer.appendChild(
+        createDiffusionList(
+          showDiscussions,     // onBack
+          handleSendBroadcast  // onSendBroadcast
+        )
+      );
       break;
     default:
-      content = createDiscussionsList(selectDiscussion);
+      discussionContainer.appendChild(createDiscussionsList(selectDiscussion));
   }
-
-  discussionContainer.appendChild(content);
 }
 
 function updateHeaderActions() {
@@ -462,47 +530,155 @@ const headerZoneMessage = createElement(
     className: [
       "w-full",
       "h-[7%]",
-      "bg-[#efe7d7]",
+      "bg-[#f0f2f5]",
       "p-2",
       "rounded-tr-xl",
       "flex",
-      "justify-between",
       "items-center",
-      "border-2",
-      "border-b-white",
+      "gap-4",
+      "border-b",
     ],
   },
-  [photo_profil, actions]
+  [
+    createElement("div", {
+      id: "headerImage",
+      className: [
+        "w-10",
+        "h-10",
+        "rounded-full",
+        "bg-cover",
+        "bg-center",
+      ]
+    }),
+    createElement("h2", {
+      id: "headerTitle",
+      className: ["text-lg", "font-semibold", "text-gray-800"]
+    }, "Sélectionnez une discussion"),
+    actions,
+    createElement("button", {
+      className: [
+        "ml-auto",
+        "px-4",
+        "py-2",
+        "text-sm",
+        "text-red-600",
+        "hover:bg-red-50",
+        "rounded-md",
+        "transition-colors",
+      ],
+      onclick: handleLogout,
+    }, "Déconnexion")
+  ]
 );
 
 const corpsZoneMessage = createElement("div", {
-  className: ["w-full", "h-[83%]", "bg-[#efe7d7]"],
+  id: "corpsZoneMessage",
+  className: [
+    "w-full",
+    "h-[83%]",
+    "bg-[#efeae2]",
+    "overflow-y-auto",
+    "scrollbar-thin",
+    "scrollbar-thumb-gray-300",
+    "scrollbar-track-transparent",
+  ],
 });
 
 const textMessage = createElement("input", {
   type: "text",
-  className: ["w-[94%]", "h-[70%]", "bg-[#f2eff0]", "rounded-xl"],
+  id: "messageInput",
+  placeholder: "Tapez votre message...",
+  className: [
+    "w-[94%]",
+    "h-[70%]",
+    "bg-[#f2eff0]",
+    "rounded-xl",
+    "px-4",
+    "focus:outline-none",
+    "focus:ring-2",
+    "focus:ring-orange-500",
+    "transition-all",
+  ],
+  onkeyup: (e) => {
+    if (e.key === "Enter") {
+      handleSendMessage();
+    }
+  }
 });
 
+function handleSendMessage() {
+  const messageInput = document.getElementById("messageInput");
+  const message = messageInput.value.trim();
+
+  if (!message) return;
+
+  if (appState.selectedDiscussion) {
+    const { type, id } = appState.selectedDiscussion;
+    if (sendMessage(type, id, message)) {
+      messageInput.value = "";
+      
+      // Mettre à jour l'affichage des messages
+      const messagesContainer = document.querySelector("#corpsZoneMessage");
+      if (messagesContainer) {
+        messagesContainer.innerHTML = "";
+        messagesContainer.appendChild(createMessagesList(type, id));
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+      
+      // Mettre à jour l'interface
+      updateDiscussionView();
+    }
+  }
+}
+
+// Modifier la création du bouton d'envoi
 const envoyer = createElement(
   "button",
   {
-    className: [
+    className: [ 
       "w-[5%]",
       "h-[80%]",
       "rounded-full",
-      "bg-green-500",
+      "bg-orange-500",
       "flex",
       "justify-center",
       "items-center",
+      "hover:bg-orange-600",
+      "transition-colors",
     ],
+    onclick: handleSendMessage,
   },
   [
     createElement("i", {
-      className: ["fa-solid", "fa-arrow-right", "text-xl", "text-white"],
+      className: ["fa-solid", "fa-paper-plane", "text-xl", "text-white"],
     }),
   ]
 );
+
+// Modifier la création du champ de texte
+// const textMessage = createElement("input", {
+//   type: "text",
+//   id: "messageInput",
+//   placeholder: "Tapez votre message...",
+//   className: [
+//     "w-[94%]",
+//     "h-[70%]",
+//     "bg-[#f2eff0]",
+//     "rounded-xl",
+//     "px-4",
+//     "focus:outline-none",
+//     "focus:ring-2",
+//     "focus:ring-orange-500",
+//     "transition-all",
+//   ],
+//   onkeyup: (e) => {
+//     if (e.key === "Enter") {
+//       handleSendMessage();
+//     }
+//   }
+// });
+
+
 
 const inputZoneMessage = createElement(
   "div",
@@ -510,7 +686,7 @@ const inputZoneMessage = createElement(
     className: [
       "w-full",
       "h-[10%]",
-      "rounded-br-xl",
+      "rounded-br-xl",     
       "py-2",
       "px-2",
       "flex",
@@ -569,7 +745,71 @@ const app = createElement(
 
 // ===== INITIALISATION =====
 const body = document.querySelector("body");
-body.append(app);
+if (authState.isAuthenticated) {
+  initializeApp();
+} else {
+  showLogin();
+}
 
 // Démarrer l'application
 showDiscussions();
+
+// Fonction pour retirer un membre d'un groupe
+function handleRemoveMember(groupId, memberId, memberName) {
+  if (confirm(`Êtes-vous sûr de vouloir retirer ${memberName} du groupe ?`)) {
+    const result = removeMemberFromGroup(groupId, memberId);
+    if (result.success) {
+      updateDiscussionView();
+      alert(`${memberName} a été retiré du groupe`);
+    } else {
+      alert(result.message);
+    }
+  }
+}
+
+// Ajouter la fonction de gestion du login
+function handleLogin(email, password) {
+  if (login(email, password)) {
+    // Connexion réussie
+    initializeApp();
+  } else {
+    alert("Email ou mot de passe incorrect");
+  }
+}
+
+// Ajouter la fonction de déconnexion
+function handleLogout() {
+  if (logout()) {
+    // Supprimer l'app existante
+    const body = document.querySelector("body");
+    body.innerHTML = "";
+    // Afficher le login
+    showLogin();
+  }
+}
+
+// Fonction d'initialisation de l'app
+function initializeApp() {
+  const body = document.querySelector("body");
+  body.innerHTML = "";
+  body.append(app);
+  showDiscussions();
+}
+
+// Fonction d'affichage du login
+function showLogin() {
+  const body = document.querySelector("body");
+  body.innerHTML = "";
+  body.append(createLoginForm(handleLogin));
+}
+
+// Fonction pour gérer l'envoi de messages de diffusion
+function handleSendBroadcast(selectedContacts, message) {
+  if (sendBroadcastMessage(selectedContacts, message)) {
+    alert("Message de diffusion envoyé avec succès");
+    updateDiscussionView();
+    showDiscussions(); // Retour à la liste des discussions
+  } else {
+    alert("Erreur lors de l'envoi du message de diffusion");
+  }
+}

@@ -6,6 +6,8 @@ export let contacts = [
     id: 1,
     nom: "Mapathé Ndiaye (vous)",
     telephone: "+221781562041",
+    email: "mapathe@example.com", // Ajout email
+    password: "123456",           // Ajout mot de passe
     dernierMessage: "hello",
     heure: "14:30",
     archive: false,
@@ -15,6 +17,8 @@ export let contacts = [
     id: 2,
     nom: "Marie Martin",
     telephone: "+33987654321",
+     email: "martin@example.com", // Ajout email
+    password: "1234567", 
     dernierMessage: "",
     heure: "12:15",
     archive: false,
@@ -42,6 +46,12 @@ export let appState = {
   currentView: "discussions",
   selectedGroup: null,
   selectedDiscussion: null,
+};
+
+// ===== ÉTAT DE L'AUTHENTIFICATION =====
+export const authState = {
+  isAuthenticated: false,
+  currentUser: null
 };
 
 // ===== FONCTIONS DE MUTATION =====
@@ -123,4 +133,110 @@ export function addGroup(groupData) {
 
 export function updateState(newState) {
   Object.assign(appState, newState);
+}
+
+// Fonction d'authentification
+export function login(email, password) {
+  const user = contacts.find(
+    contact => contact.email === email && contact.password === password
+  );
+
+  if (user) {
+    authState.isAuthenticated = true;
+    authState.currentUser = user;
+    return true;
+  }
+  return false;
+}
+
+// Fonction de déconnexion
+export function logout() {
+  authState.isAuthenticated = false;
+  authState.currentUser = null;
+  return true;
+}
+
+// Ajouter ces nouvelles fonctions
+export const messages = {
+  contacts: {}, // Messages des contacts
+  groups: {}    // Messages des groupes
+};
+
+// Fonction pour envoyer un message
+export function sendMessage(type, id, content) {
+  const now = new Date().toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const message = {
+    id: Date.now(),
+    content,
+    time: now,
+    sender: 1, // ID de l'utilisateur actuel (vous)
+    type: 'text'
+  };
+
+  // Initialiser le tableau de messages si nécessaire
+  if (type === "contact" && !messages.contacts[id]) {
+    messages.contacts[id] = [];
+  } else if (type === "group" && !messages.groups[id]) {
+    messages.groups[id] = [];
+  }
+
+  // Ajouter le message
+  if (type === "contact") {
+    messages.contacts[id].push(message);
+    
+    // Mettre à jour le dernier message dans le contact
+    const contact = contacts.find(c => c.id === id);
+    if (contact) {
+      contact.dernierMessage = content;
+      contact.heure = now;
+    }
+  } else if (type === "group") {
+    messages.groups[id].push(message);
+    
+    // Mettre à jour le dernier message dans le groupe
+    const group = groupes.find(g => g.id === id);
+    if (group) {
+      group.dernierMessage = content;
+      group.heure = now;
+    }
+  }
+
+  return true;
+}
+
+export function sendBroadcastMessage(selectedContactIds, message) {
+  const now = new Date().toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  selectedContactIds.forEach(id => {
+    // Créer le message pour chaque contact
+    if (!messages.contacts[id]) {
+      messages.contacts[id] = [];
+    }
+
+    const broadcastMessage = {
+      id: Date.now(),
+      content: `[Diffusion] ${message}`,
+      time: now,
+      sender: 1,
+      type: 'text'
+    };
+
+    messages.contacts[id].push(broadcastMessage);
+
+    // Mettre à jour le dernier message du contact
+    const contact = contacts.find(c => c.id === id);
+    if (contact) {
+      contact.dernierMessage = `[Diffusion] ${message}`;
+      contact.heure = now;
+    }
+  });
+
+  return true;
 }

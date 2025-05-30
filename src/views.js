@@ -1,33 +1,65 @@
 import { createElement } from "./component.js";
-import { contacts, groupes } from "./data.js";
+import { contacts, groupes, messages } from "./data.js";
 import { getContactById, getGroupById } from "./utils.js";
 import { appState } from "./data.js";
 import { createAvatarElement } from "./avatar.js";  // Ajoutez cette ligne
-
+import { removeMemberFromGroup } from "./utils.js";
+import { toggleAdminStatus } from "./utils.js";
+import { filterDiscussions } from "./utils.js";
+import { sortDiscussionsAlphabetically } from "./utils.js"; // Importez la fonction de tri alphabétique
 // ===== LISTES ET DISCUSSIONS =====
 export function createDiscussionsList(onSelectDiscussion) {
-  const allItems = [
+  // Récupérer toutes les discussions avec des messages
+  const discussionsWithMessages = [
     ...contacts
       .filter((contact) => !contact.archive)
+      .filter((contact) => {
+        // Vérifier si le contact a des messages
+        const hasMessages = messages.contacts[contact.id]?.length > 0;
+        // Ou s'il a un dernier message qui n'est pas "Nouveau contact"
+        const hasValidLastMessage = contact.dernierMessage && 
+                                  contact.dernierMessage !== "Nouveau contact";
+        return hasMessages || hasValidLastMessage;
+      })
       .map((contact) => ({ ...contact, type: "contact" })),
     ...groupes
       .filter((group) => !group.archive)
-      .map((group) => ({ ...group, type: "group" })),
+      .filter((group) => {
+        // Vérifier si le groupe a des messages
+        const hasMessages = messages.groups[group.id]?.length > 0;
+        // Ou s'il a un dernier message qui n'est pas "Groupe créé"
+        const hasValidLastMessage = group.dernierMessage && 
+                                  group.dernierMessage !== "Groupe créé";
+        return hasMessages || hasValidLastMessage;
+      })
+      .map((group) => ({ ...group, type: "group" }))
   ];
 
-  // Vérifie s'il y a des discussions existantes avec des messages
-  const hasDiscussions = allItems.some(
-    (item) => item.dernierMessage && item.dernierMessage !== "Nouveau contact"
-  );
+  // Ajouter cette ligne pour définir hasDiscussions
+  const hasDiscussions = discussionsWithMessages.length > 0;
 
-  // Si pas de discussions, afficher tous les contacts
-  const itemsToDisplay = !hasDiscussions
-    ? contacts.map((contact) => ({
-        ...contact,
-        type: "contact",
-        dernierMessage: "Cliquez pour démarrer une conversation",
-      }))
-    : allItems;
+  const searchInput = document.getElementById("searchInput");
+  const searchTerm = searchInput?.value?.trim() || "";
+
+  let itemsToDisplay;
+
+  if (searchTerm === "*") {
+    // Afficher tous les contacts et groupes triés alphabétiquement
+    itemsToDisplay = sortDiscussionsAlphabetically([
+      ...contacts
+        .filter(contact => !contact.archive)
+        .map(contact => ({ ...contact, type: "contact" })),
+      ...groupes
+        .filter(group => !group.archive)
+        .map(group => ({ ...group, type: "group" }))
+    ]);
+  } else if (searchTerm) {
+    // Recherche normale
+    itemsToDisplay = filterDiscussions(searchTerm);
+  } else {
+    // Afficher uniquement les discussions avec messages
+    itemsToDisplay = discussionsWithMessages;
+  }
 
   return createElement("div", { 
     className: [
@@ -38,7 +70,6 @@ export function createDiscussionsList(onSelectDiscussion) {
       "bg-[#f9f7f5]",
     ] 
   }, [
-
     createElement("div", {
       className: [
         "p-4",
@@ -59,7 +90,7 @@ export function createDiscussionsList(onSelectDiscussion) {
         ]
       }, !hasDiscussions ? "Contacts" : "Discussions"),
 
-      // Barre de recherche améliorée
+      // Barre de recherche modifiée
       createElement("div", {
         className: [
           "relative",
@@ -72,6 +103,7 @@ export function createDiscussionsList(onSelectDiscussion) {
       }, [
         createElement("input", {
           type: "text",
+          id: "searchInput",
           placeholder: "Rechercher une discussion...",
           className: [
             "w-full",
@@ -88,6 +120,159 @@ export function createDiscussionsList(onSelectDiscussion) {
             "focus:ring-orange-500",
             "transition-all",
           ],
+          oninput: (e) => {
+            const searchTerm = e.target.value.trim();
+            const listContainer = document.querySelector("#discussionsList");
+            
+            if (listContainer) {
+              listContainer.innerHTML = "";
+              let filteredItems;
+
+              if (searchTerm === "*") {
+                // Tri alphabétique de tous les éléments
+                filteredItems = sortDiscussionsAlphabetically([
+                  ...contacts.map(contact => ({ ...contact, type: "contact" })),
+                  ...groupes.map(group => ({ ...group, type: "group" }))
+                ]);
+              } else if (searchTerm === "") {
+                // Retour à l'affichage par défaut
+                filteredItems = itemsToDisplay;
+              } else {
+                // Recherche normale
+                filteredItems = filterDiscussions(searchTerm);
+              }
+
+              // Affichage des résultats
+              const updatedList = filteredItems.map((item) =>
+                createElement("div", {
+                  className: [
+                    "flex",
+                    "items-center",
+                    "p-3",
+                    "rounded-xl",
+                    "hover:bg-gray-100",
+                    "cursor-pointer",
+                    "mb-1",
+                    "transition-all",
+                    "duration-200",
+                    "group",
+                    appState.selectedDiscussion?.id === item.id ? "bg-orange-50" : "bg-white",
+                    "relative",
+                    "shadow-sm",
+                    "hover:shadow-md",
+                  ],
+                  onclick: () => onSelectDiscussion(item.type, item.id),
+                }, [
+                  // Avatar avec point de statut
+                  createElement("div", {
+                    className: ["relative"]
+                  }, [
+                    createAvatarElement(item.nom, 12, item.avatarColor),
+                    // Point vert de statut
+                    createElement("div", {
+                      className: [
+                        "absolute",
+                        "-bottom-0.5",
+                        "-right-0.5",
+                        "w-3",
+                        "h-3",
+                        "bg-green-500",
+                        "rounded-full",
+                        "border-2",
+                        "border-white",
+                        "shadow-sm",
+                      ]
+                    })
+                  ]),
+
+                  // Informations de la discussion
+                  createElement("div", {
+                    className: [
+                      "flex-1",
+                      "ml-4",
+                      "border-l",
+                      "border-gray-100",
+                      "pl-4",
+                    ]
+                  }, [
+                    // En-tête avec nom et heure
+                    createElement("div", {
+                      className: ["flex", "justify-between", "items-center", "mb-0.5"]
+                    }, [
+                      createElement("h3", {
+                        className: [
+                          "font-semibold",
+                          "text-gray-900",
+                          "group-hover:text-orange-600",
+                          "transition-colors",
+                        ]
+                      }, item.nom),
+                      createElement("span", {
+                        className: [
+                          "text-xs",
+                          "text-gray-500",
+                          "font-medium",
+                          "min-w-[45px]",
+                          "text-right",
+                        ]
+                      }, item.heure || "")
+                    ]),
+
+                    // Ligne du dernier message
+                    createElement("div", {
+                      className: ["flex", "items-center", "justify-between"]
+                    }, [
+                      createElement("p", {
+                        className: [
+                          "text-sm",
+                          "text-gray-600",
+                          "truncate",
+                          "max-w-[200px]",
+                          !hasDiscussions ? "italic" : "",
+                          "group-hover:text-gray-800",
+                        ]
+                      }, item.type === "group" 
+                        ? `${item.membres.length} membres` 
+                        : item.dernierMessage
+                      ),
+                      // Badge de messages non lus (optionnel)
+                      item.unreadCount && createElement("span", {
+                        className: [
+                          "ml-2",
+                          "bg-orange-500",
+                          "text-white",
+                          "text-xs",
+                          "font-medium",
+                          "px-2",
+                          "py-0.5",
+                          "rounded-full",
+                          "min-w-[20px]",
+                          "text-center",
+                        ]
+                      }, item.unreadCount)
+                    ])
+                  ])
+                ])
+              );
+              
+              if (updatedList.length === 0) {
+                listContainer.appendChild(
+                  createElement("div", {
+                    className: [
+                      "flex",
+                      "items-center",
+                      "justify-center",
+                      "p-4",
+                      "text-gray-500",
+                      "italic"
+                    ]
+                  }, searchTerm === "*" ? "Aucune discussion disponible" : "Aucun résultat trouvé")
+                );
+              } else {
+                updatedList.forEach(item => listContainer.appendChild(item));
+              }
+            }
+          }
         }),
         createElement("i", {
           className: [
@@ -103,8 +288,9 @@ export function createDiscussionsList(onSelectDiscussion) {
       ])
     ]),
 
-    // Liste des discussions avec nouveau style
+    // Conteneur de la liste avec ID
     createElement("div", {
+      id: "discussionsList",
       className: [
         "flex-1",
         "overflow-y-auto",
@@ -715,16 +901,9 @@ export function createContactsList(onBack) {
   ]);
 }
 
-export function createGroupsList(onBack, onGroupSelect, onCreateGroup) {
+export function createGroupsList(onBack, onGroupSelect, onCreateGroup, onSelectDiscussion) {
    return createElement("div", { 
-    className: [
-      "w-full", 
-      "h-full", 
-      "flex", 
-      "flex-col",
-      "bg-[#f9f7f5]",
-      "relative",
-    ] 
+    className: ["w-full", "h-full", "flex", "flex-col", "bg-[#f9f7f5]", "relative"] 
   }, [
     // En-tête avec style amélioré
     createElement("div", {
@@ -782,8 +961,9 @@ export function createGroupsList(onBack, onGroupSelect, onCreateGroup) {
           "bg-white",
           "shadow-sm",
           "hover:shadow-md",
+          "relative", // Ajouté pour le positionnement des boutons
         ],
-        onclick: () => onGroupSelect(group.id),
+        // Supprimer l'onclick ici
       }, [
         // Avatar avec badge nombre de membres
         createElement("div", {
@@ -848,6 +1028,46 @@ export function createGroupsList(onBack, onGroupSelect, onCreateGroup) {
               "group-hover:text-gray-800",
             ]
           }, group.description || `Groupe · ${group.membres.length} membres`)
+        ]),
+
+        // Nouveaux boutons pour les actions
+        createElement("div", {
+          className: ["absolute", "right-2", "top-1/2", "-translate-y-1/2", "flex", "gap-2"],
+        }, [
+          // Bouton pour les messages
+          createElement("button", {
+            className: [
+              "px-3",
+              "py-1",
+              "rounded-md",
+              "bg-orange-100",
+              "text-orange-600",
+              "hover:bg-orange-200",
+              "transition-colors",
+              "text-sm",
+            ],
+            onclick: (e) => {
+              e.stopPropagation();
+              onSelectDiscussion("group", group.id); // Utilisation correcte du paramètre
+            },
+          }, "Messages"),
+          // Bouton pour les détails
+          createElement("button", {
+            className: [
+              "px-3",
+              "py-1",
+              "rounded-md",
+              "bg-blue-100",
+              "text-blue-600",
+              "hover:bg-blue-200",
+              "transition-colors",
+              "text-sm",
+            ],
+            onclick: (e) => {
+              e.stopPropagation(); // Empêche la propagation au parent
+              onGroupSelect(group.id);
+            },
+          }, "Détails")
         ])
       ])
     )),
@@ -950,47 +1170,111 @@ export function createGroupDetails(groupId, onBack, onAddMembers) {
               "p-3",
               "border-b",
               "border-gray-200",
+              "justify-between",
             ],
           },
           [
-            createElement("img", {
-              src: membre.photo,
-              alt: membre.nom,
-              className: ["w-8", "h-8", "rounded-full", "mr-3", "object-cover"],
-            }),
-            createElement("div", { className: ["flex-1"] }, [
-              createElement(
-                "div",
-                { className: ["flex", "items-center", "gap-2"] },
-                [
-                  createElement(
-                    "h4",
-                    { className: ["font-semibold", "text-sm"] },
-                    membre.nom
-                  ),
-                  membre.role === "admin" && 
-                  createElement(
-                    "span",
-                    {
-                      className: [
-                        "text-xs",
-                        "bg-blue-100",
-                        "text-blue-800",
-                        "px-2",
-                        "py-0.5",
-                        "rounded-full",
-                      ],
-                    },
-                    "Admin"
-                  ),
-                ]
-              ),
-              createElement(
-                "p",
-                { className: ["text-xs", "text-gray-600"] },
-                membre.telephone
-              ),
+            createElement("div", { 
+              className: ["flex", "items-center", "flex-1"] 
+            }, [
+              createAvatarElement(membre.nom, 8, membre.avatarColor),
+              createElement("div", { 
+                className: ["flex-1", "ml-3"] 
+              }, [
+                createElement(
+                  "div",
+                  { className: ["flex", "items-center", "gap-2"] },
+                  [
+                    createElement(
+                      "h4",
+                      { className: ["font-semibold", "text-sm"] },
+                      membre.nom
+                    ),
+                    membre.role === "admin" && 
+                    createElement(
+                      "span",
+                      {
+                        className: [
+                          "text-xs",
+                          "bg-blue-100",
+                          "text-blue-800",
+                          "px-2",
+                          "py-0.5",
+                          "rounded-full",
+                        ],
+                      },
+                      "Admin"
+                    ),
+                  ]
+                ),
+                createElement(
+                  "p",
+                  { className: ["text-xs", "text-gray-600"] },
+                  membre.telephone
+                ),
+              ]),
             ]),
+            // Bouton d'action
+            createElement("div", {
+              className: ["flex", "gap-2"]
+            }, [
+              // Bouton Admin (seulement pour les non-admin et si vous êtes admin)
+              membre.id !== 1 && createElement(
+                "button",
+                {
+                  className: [
+                    "px-3",
+                    "py-1",
+                    "rounded-md",
+                    "text-sm",
+                    "transition-colors",
+                    membre.role === "admin"
+                      ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                      : "bg-green-100 text-green-600 hover:bg-green-200",
+                  ],
+                  onclick: () => {
+                    const result = toggleAdminStatus(groupId, membre.id);
+                    if (result.success) {
+                      // Rafraîchir l'affichage
+                      document.querySelector("#discussion").innerHTML = "";
+                      document.querySelector("#discussion").appendChild(
+                        createGroupDetails(groupId, onBack, onAddMembers)
+                      );
+                    } else {
+                      alert(result.message);
+                    }
+                  },
+                },
+                membre.role === "admin" ? "Enlever admin" : "Rendre admin"
+              ),
+              // Bouton de retrait (seulement pour les non-admins)
+              membre.role !== "admin" && createElement(
+                "button",
+                {
+                  className: [
+                    "text-red-500",
+                    "text-sm",
+                    "px-3",
+                    "py-1",
+                    "rounded-md",
+                    "hover:bg-red-50",
+                    "transition-colors",
+                  ],
+                  onclick: () => {
+                    const result = removeMemberFromGroup(groupId, membre.id);
+                    if (result.success) {
+                      document.querySelector("#discussion").innerHTML = "";
+                      document.querySelector("#discussion").appendChild(
+                        createGroupDetails(groupId, onBack, onAddMembers)
+                      );
+                    } else {
+                      alert(result.message);
+                    }
+                  },
+                },
+                "Retirer du groupe"
+              ),
+            ])
           ]
         )
       )
@@ -1116,34 +1400,24 @@ export function createAddMemberForm(groupId, onBack, onSave) {
   ]);
 }
 
-export function createDiffusionList(onBack) {
+export function createDiffusionList(onBack, onSendBroadcast) {
   return createElement("div", { 
-    className: [
-      "w-full", 
-      "h-full", 
-      "flex", 
-      "flex-col",
-      "bg-[#f9f7f5]",
-    ] 
+    className: ["w-full", "h-full", "flex", "flex-col", "p-4"] 
   }, [
     // En-tête
     createElement("div", {
       className: [
-        "p-4",
-        "border-b",
-        "bg-white",
-        "sticky",
-        "top-0",
-        "z-10",
-        "shadow-sm",
         "flex",
         "justify-between",
         "items-center",
+        "mb-6",
+        "pb-4",
+        "border-b",
       ]
     }, [
-      createElement("h1", {
+      createElement("h2", {
         className: ["text-xl", "font-bold", "text-gray-800"]
-      }, "Liste de diffusion"),
+      }, "Message de diffusion"),
       createElement("button", {
         className: [
           "text-gray-500",
@@ -1160,74 +1434,336 @@ export function createDiffusionList(onBack) {
       className: [
         "flex-1",
         "overflow-y-auto",
-        "scrollbar-thin",
-        "scrollbar-thumb-gray-300",
-        "scrollbar-track-transparent",
-        "px-2",
-        "py-1",
+        "mb-4",
       ]
-    }, contacts.map((contact) =>
+    }, [
+      // Section des contacts
+      createElement("div", {
+        className: ["space-y-2", "mb-4"]
+      }, contacts
+        .filter(contact => contact.id !== 1) // Exclure votre propre contact
+        .map(contact => 
+          createElement("div", {
+            className: [
+              "flex",
+              "items-center",
+              "p-3",
+              "border",
+              "rounded-md",
+              "hover:bg-gray-50",
+            ]
+          }, [
+            createElement("input", {
+              type: "checkbox",
+              id: `diffusion-${contact.id}`,
+              value: contact.id,
+              className: [
+                "mr-3",
+                "w-4",
+                "h-4",
+                "text-orange-500",
+                "focus:ring-orange-500",
+                "rounded",
+              ]
+            }),
+            createAvatarElement(contact.nom, 8, contact.avatarColor),
+            createElement("label", {
+              htmlFor: `diffusion-${contact.id}`,
+              className: [
+                "ml-3",
+                "flex-1",
+                "cursor-pointer",
+                "font-medium",
+                "text-gray-700",
+              ]
+            }, contact.nom)
+          ])
+        )
+      )
+    ]),
+
+    // Zone de message et bouton d'envoi
+    createElement("form", {
+      className: ["mt-auto", "space-y-4"],
+      onsubmit: (e) => {
+        e.preventDefault();
+        
+        // Récupérer les contacts sélectionnés
+        const selectedContacts = Array.from(
+          document.querySelectorAll('input[type="checkbox"]:checked')
+        ).map(cb => parseInt(cb.value));
+
+        // Récupérer le message
+        const message = document.getElementById("diffusionMessage").value.trim();
+
+        if (selectedContacts.length === 0) {
+          alert("Veuillez sélectionner au moins un contact");
+          return;
+        }
+
+        if (!message) {
+          alert("Veuillez entrer un message");
+          return;
+        }
+
+        // Envoyer le message de diffusion
+        onSendBroadcast(selectedContacts, message);
+      }
+    }, [
+      createElement("textarea", {
+        id: "diffusionMessage",
+        placeholder: "Tapez votre message de diffusion...",
+        className: [
+          "w-full",
+          "p-3",
+          "border",
+          "rounded-md",
+          "focus:ring-2",
+          "focus:ring-orange-500",
+          "focus:border-orange-500",
+          "h-32",
+          "resize-none",
+        ],
+        required: true
+      }),
+      createElement("button", {
+        type: "submit",
+        className: [
+          "w-full",
+          "bg-orange-500",
+          "text-white",
+          "py-3",
+          "rounded-md",
+          "font-medium",
+          "hover:bg-orange-600",
+          "transition-colors",
+        ]
+      }, "Envoyer le message")
+    ])
+  ]);
+}
+
+export function createMessagesList(type, id) {
+  const messagesList = type === "contact" 
+    ? messages.contacts[id] || []
+    : messages.groups[id] || [];
+
+  return createElement("div", {
+    className: [
+      "flex-1",
+      "p-4",
+      "flex",
+      "flex-col",
+      "gap-2",
+      "overflow-y-auto",
+    ]
+  }, messagesList.map(message => {
+    const isOwnMessage = message.sender === 1;
+    let senderName = "";
+    
+    // Ajouter le nom de l'expéditeur pour les messages de groupe
+    if (type === "group" && !isOwnMessage) {
+      const sender = contacts.find(c => c.id === message.sender);
+      senderName = sender ? sender.nom : "Inconnu";
+    }
+
+    return createElement("div", {
+      className: [
+        "flex",
+        isOwnMessage ? "justify-end" : "justify-start",
+      ]
+    }, [
       createElement("div", {
         className: [
-          "flex",
-          "items-center",
-          "p-3",
-          "rounded-xl",
-          "hover:bg-gray-100",
-          "cursor-pointer",
-          "mb-1",
-          "transition-all",
-          "duration-200",
-          "group",
-          "bg-white",
+          "max-w-[60%]",
+          "p-2",
+          "rounded-lg",
+          isOwnMessage 
+            ? "bg-[#d9fdd3] rounded-tr-none" 
+            : "bg-white rounded-tl-none",
           "shadow-sm",
-          "hover:shadow-md",
         ]
       }, [
-        createElement("input", {
-          type: "checkbox",
-          id: `diffusion-${contact.id}`,
-          className: [
-            "mr-3",
-            "w-4",
-            "h-4",
-            "accent-orange-500",
-            "rounded",
-          ],
-        }),
-        // Avatar
-        createElement("div", {
-          className: ["relative"]
-        }, [
-          createAvatarElement(contact.nom, 12, contact.avatarColor)
-        ]),
-        // Informations
-        createElement("div", {
-          className: [
-            "flex-1",
-            "ml-4",
-            "border-l",
-            "border-gray-100",
-            "pl-4",
-          ]
-        }, [
-          createElement("h3", {
-            className: [
-              "font-semibold",
-              "text-gray-900",
-              "group-hover:text-orange-600",
-              "transition-colors",
-            ]
-          }, contact.nom),
-          createElement("p", {
-            className: [
-              "text-sm",
-              "text-gray-600",
-              "group-hover:text-gray-800",
-            ]
-          }, contact.telephone)
-        ])
+        // Afficher le nom de l'expéditeur dans les groupes
+        type === "group" && !isOwnMessage && createElement("p", {
+          className: ["text-xs", "font-semibold", "text-blue-600", "mb-1"]
+        }, senderName),
+        createElement("p", {
+          className: ["text-sm", "text-gray-800", "mb-1"]
+        }, message.content),
+        createElement("span", {
+          className: ["text-[10px]", "text-gray-500", "float-right"]
+        }, message.time)
       ])
-    ))
+    ]);
+  }));
+}
+
+export function createLoginForm(onLogin) {
+  return createElement("div", {
+    className: [
+      "min-h-screen",
+      "w-full",
+      "flex",
+      "flex-col",
+      "items-center",
+      "justify-center",
+      "bg-gradient-to-r",
+      "from-orange-500",
+      "to-orange-600",
+      "p-4",
+    ]
+  }, [
+    // Logo Container
+    createElement("div", {
+      className: [
+        "mb-8",
+        "text-center",
+      ]
+    }, [
+      createElement("h1", {
+        className: [
+          "text-4xl",
+          "font-bold",
+          "text-white",
+          "mb-2",
+        ]
+      }, "WhatsApp Clone"),
+      createElement("p", {
+        className: [
+          "text-orange-100",
+          "text-lg",
+        ]
+      }, "Connectez-vous pour continuer")
+    ]),
+    
+    // Form Container
+    createElement("div", {
+      className: [
+        "w-full",
+        "max-w-md",
+        "bg-white",
+        "rounded-2xl",
+        "shadow-2xl",
+        "p-8",
+        "space-y-6",
+      ]
+    }, [
+      // Form
+      createElement("form", {
+        className: ["space-y-6"],
+        onsubmit: (e) => {
+          e.preventDefault();
+          const email = document.getElementById("loginEmail").value;
+          const password = document.getElementById("loginPassword").value;
+          onLogin(email, password);
+        }
+      }, [
+        // Email Field
+        createElement("div", {}, [
+          createElement("label", {
+            className: ["text-sm", "font-medium", "text-gray-700", "block", "mb-2"],
+            htmlFor: "loginEmail"
+          }, "Email"),
+          createElement("input", {
+            type: "email",
+            id: "loginEmail",
+            required: true,
+            placeholder: "exemple@email.com",
+            className: [
+              "w-full",
+              "px-4",
+              "py-3",
+              "border",
+              "border-gray-300",
+              "rounded-lg",
+              "focus:outline-none",
+              "focus:ring-2",
+              "focus:ring-orange-500",
+              "focus:border-orange-500",
+              "transition-all",
+            ]
+          })
+        ]),
+
+        // Password Field
+        createElement("div", {}, [
+          createElement("label", {
+            className: ["text-sm", "font-medium", "text-gray-700", "block", "mb-2"],
+            htmlFor: "loginPassword"
+          }, "Mot de passe"),
+          createElement("input", {
+            type: "password",
+            id: "loginPassword",
+            required: true,
+            placeholder: "••••••",
+            className: [
+              "w-full",
+              "px-4",
+              "py-3",
+              "border",
+              "border-gray-300",
+              "rounded-lg",
+              "focus:outline-none",
+              "focus:ring-2",
+              "focus:ring-orange-500",
+              "focus:border-orange-500",
+              "transition-all",
+            ]
+          })
+        ]),
+
+        // Submit Button
+        createElement("button", {
+          type: "submit",
+          className: [
+            "w-full",
+            "bg-orange-500",
+            "text-white",
+            "py-3",
+            "rounded-lg",
+            "font-semibold",
+            "hover:bg-orange-600",
+            "transition-colors",
+            "shadow-lg",
+            "hover:shadow-xl",
+            "transform",
+            "hover:-translate-y-0.5",
+            "transition-all",
+          ]
+        }, "Se connecter")
+      ]),
+
+      // Divider
+      createElement("div", {
+        className: ["relative", "py-4"]
+      }, [
+        createElement("div", {
+          className: ["absolute", "inset-0", "flex", "items-center"]
+        }, [
+          createElement("div", {
+            className: ["w-full", "border-t", "border-gray-200"]
+          })
+        ]),
+        createElement("div", {
+          className: ["relative", "flex", "justify-center", "text-sm"]
+        }, [
+          createElement("span", {
+            className: ["px-2", "bg-white", "text-gray-500"]
+          }, "Connexion sécurisée")
+        ])
+      ]),
+
+      // Help text
+      createElement("p", {
+        className: ["text-center", "text-sm", "text-gray-600"]
+      }, [
+        "Identifiants de test : ",
+        createElement("br", {}),
+        "Email: mapathe@example.com",
+        createElement("br", {}),
+        "Mot de passe: 123456"
+      ])
+    ])
   ]);
 }

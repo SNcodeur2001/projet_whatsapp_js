@@ -1,4 +1,16 @@
 import { createElement } from "./component.js";
+import {
+  createDiscussionsList,
+  createArchivesList,
+  createContactForm,
+  createGroupForm,
+  createContactsList,
+  createGroupsList,
+  createGroupDetails,
+  createAddMemberForm,
+  createDiffusionList,
+  createMessagesList,  // Ajoutez cette ligne
+} from "./views.js";
 
 const avatarColors = [
   'bg-red-500',
