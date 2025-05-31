@@ -1,39 +1,21 @@
 import { createElement } from "./component.js";
-import { contacts, groupes, messages } from "./data.js";
+import { contacts, groupes, messages, authState } from "./data.js";
 import { getContactById, getGroupById } from "./utils.js";
 import { appState } from "./data.js";
-import { createAvatarElement } from "./avatar.js";  // Ajoutez cette ligne
+import { createAvatarElement } from "./avatar.js";
 import { removeMemberFromGroup } from "./utils.js";
 import { toggleAdminStatus } from "./utils.js";
 import { filterDiscussions } from "./utils.js";
-import { sortDiscussionsAlphabetically } from "./utils.js"; // Importez la fonction de tri alphabétique
+import { sortDiscussionsAlphabetically } from "./utils.js";
+import { getConversationMessages } from "./data.js";
 // ===== LISTES ET DISCUSSIONS =====
 export function createDiscussionsList(onSelectDiscussion) {
-  // Récupérer toutes les discussions avec des messages
-  const discussionsWithMessages = [
-    ...contacts
-      .filter((contact) => !contact.archive)
-      .filter((contact) => {
-        // Vérifier si le contact a des messages
-        const hasMessages = messages.contacts[contact.id]?.length > 0;
-        // Ou s'il a un dernier message qui n'est pas "Nouveau contact"
-        const hasValidLastMessage = contact.dernierMessage && 
-                                  contact.dernierMessage !== "Nouveau contact";
-        return hasMessages || hasValidLastMessage;
-      })
-      .map((contact) => ({ ...contact, type: "contact" })),
-    ...groupes
-      .filter((group) => !group.archive)
-      .filter((group) => {
-        // Vérifier si le groupe a des messages
-        const hasMessages = messages.groups[group.id]?.length > 0;
-        // Ou s'il a un dernier message qui n'est pas "Groupe créé"
-        const hasValidLastMessage = group.dernierMessage && 
-                                  group.dernierMessage !== "Groupe créé";
-        return hasMessages || hasValidLastMessage;
-      })
-      .map((group) => ({ ...group, type: "group" }))
-  ];
+  // Utiliser les contacts de l'utilisateur connecté
+  const userContacts = authState.currentUserData.contacts;
+  
+  const discussionsWithMessages = userContacts
+    .filter(contact => !contact.archive)
+    .map(contact => ({ ...contact, type: "contact" }));
 
   // Ajouter cette ligne pour définir hasDiscussions
   const hasDiscussions = discussionsWithMessages.length > 0;
@@ -1544,9 +1526,9 @@ export function createDiffusionList(onBack, onSendBroadcast) {
 }
 
 export function createMessagesList(type, id) {
-  const messagesList = type === "contact" 
-    ? messages.contacts[id] || []
-    : messages.groups[id] || [];
+  const currentUserId = authState.currentUser.id;
+  const conversationId = `${Math.min(currentUserId, id)}_${Math.max(currentUserId, id)}`;
+  const conversation = messages.conversations[conversationId] || { messages: [] };
 
   return createElement("div", {
     className: [
@@ -1556,47 +1538,119 @@ export function createMessagesList(type, id) {
       "flex-col",
       "gap-2",
       "overflow-y-auto",
+      "bg-[#efeae2]", // Fond style WhatsApp
     ]
-  }, messagesList.map(message => {
-    const isOwnMessage = message.sender === 1;
-    let senderName = "";
-    
-    // Ajouter le nom de l'expéditeur pour les messages de groupe
-    if (type === "group" && !isOwnMessage) {
-      const sender = contacts.find(c => c.id === message.sender);
-      senderName = sender ? sender.nom : "Inconnu";
-    }
-
-    return createElement("div", {
+  }, [
+    // Date du jour
+    createElement("div", {
       className: [
         "flex",
-        isOwnMessage ? "justify-end" : "justify-start",
+        "justify-center",
+        "mb-4",
       ]
     }, [
-      createElement("div", {
+      createElement("span", {
         className: [
-          "max-w-[60%]",
-          "p-2",
-          "rounded-lg",
-          isOwnMessage 
-            ? "bg-[#d9fdd3] rounded-tr-none" 
-            : "bg-white rounded-tl-none",
+          "bg-white",
+          "text-gray-500",
+          "text-xs",
+          "px-3",
+          "py-1",
+          "rounded-full",
           "shadow-sm",
         ]
+      }, new Date().toLocaleDateString())
+    ]),
+
+    // Messages
+    ...conversation.messages.map(message => {
+      const isOwnMessage = message.sender === currentUserId;
+      const timeClass = isOwnMessage ? "text-gray-600" : "text-gray-500";
+
+      return createElement("div", {
+        className: [
+          "flex",
+          isOwnMessage ? "justify-end" : "justify-start",
+          "mb-2",
+        ]
       }, [
-        // Afficher le nom de l'expéditeur dans les groupes
-        type === "group" && !isOwnMessage && createElement("p", {
-          className: ["text-xs", "font-semibold", "text-blue-600", "mb-1"]
-        }, senderName),
-        createElement("p", {
-          className: ["text-sm", "text-gray-800", "mb-1"]
-        }, message.content),
-        createElement("span", {
-          className: ["text-[10px]", "text-gray-500", "float-right"]
-        }, message.time)
-      ])
-    ]);
-  }));
+        createElement("div", {
+          className: [
+            "max-w-[65%]",
+            "relative",
+            "group",
+          ]
+        }, [
+          // Bulle du message
+          createElement("div", {
+            className: [
+              "p-2",
+              "px-3",
+              "rounded-lg",
+              isOwnMessage ? 
+                "bg-[#dcf8c6] rounded-tr-none" : 
+                "bg-white rounded-tl-none",
+              "shadow-sm",
+            ]
+          }, [
+            // Contenu du message
+            createElement("p", {
+              className: ["text-sm", "text-gray-800", "mb-1"]
+            }, message.content),
+
+            // Heure et statut
+            createElement("div", {
+              className: [
+                "flex",
+                "items-center",
+                "justify-end",
+                "gap-1",
+                "mt-1",
+              ]
+            }, [
+              createElement("span", {
+                className: ["text-[10px]", timeClass]
+              }, message.time),
+              isOwnMessage && createElement("i", {
+                className: [
+                  "fa-solid",
+                  message.status === 'read' ? 
+                    "fa-check-double text-blue-500" : 
+                    "fa-check text-gray-400",
+                  "text-[10px]",
+                ]
+              })
+            ])
+          ]),
+
+          // Flèche de la bulle
+          createElement("div", {
+            className: [
+              "absolute",
+              isOwnMessage ? "-right-2" : "-left-2",
+              "top-0",
+              "w-2",
+              "h-4",
+              "overflow-hidden",
+            ]
+          }, [
+            createElement("div", {
+              className: [
+                "absolute",
+                "w-4",
+                "h-4",
+                "transform",
+                "rotate-45",
+                isOwnMessage ? 
+                  "bg-[#dcf8c6] -left-2" : 
+                  "bg-white -right-2",
+              ]
+            })
+          ])
+        ])
+      ]);
+    })
+  ]);
 }
 
 export function createLoginForm(onLogin) {
