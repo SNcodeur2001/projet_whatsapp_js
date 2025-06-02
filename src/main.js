@@ -33,7 +33,8 @@ import {
   createGroupDetails,
   createAddMemberForm,
   createDiffusionList,
-  createMessagesList
+  createMessagesList,
+  createEmptyMessageView  // Add this line
 } from "./views.js";
 
 // ===== GESTIONNAIRES D'ÉVÉNEMENTS =====

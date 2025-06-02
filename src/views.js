@@ -10,7 +10,24 @@ import { sortDiscussionsAlphabetically } from "./utils.js";
 import { getConversationMessages } from "./data.js";
 // ===== LISTES ET DISCUSSIONS =====
 export function createDiscussionsList(onSelectDiscussion) {
-  // Récupérer les contacts de l'utilisateur connecté
+  // Check if user is logged in and has data
+  if (!authState.currentUserData) {
+    return createElement("div", {
+      className: [
+        "w-full",
+        "h-full",
+        "flex",
+        "items-center",
+        "justify-center"
+      ]
+    }, [
+      createElement("p", {
+        className: ["text-gray-500", "text-lg"]
+      }, "Veuillez vous connecter")
+    ]);
+  }
+
+  // Get user contacts
   const userContacts = authState.currentUserData.contacts;
   
   // Filtrer les contacts non archivés avec des messages
@@ -1852,49 +1869,61 @@ export function createEmptyMessageView() {
       "flex-col",
       "items-center",
       "justify-center",
-      "bg-[#f0f2f5]",
-      "text-center",
-      "px-4"
+      "bg-[#f8fafc]",
+      "gap-6"
     ]
   }, [
-    // Icône
+    // Icône WhatsApp
     createElement("div", {
       className: [
-        "w-72",
-        "h-72",
-        "mb-8",
-        "rounded-full",
-        "bg-gray-100",
+        "w-48",
+        "h-48",
         "flex",
         "items-center",
-        "justify-center"
+        "justify-center",
+        "rounded-full",
+        "bg-gray-100"
       ]
     }, [
       createElement("i", {
         className: [
-          "fa-solid",
-          "fa-comments",
-          "text-8xl",
+          "fa-brands",
+          "fa-whatsapp",
+          "text-7xl",
           "text-gray-300"
         ]
       })
     ]),
-    // Titre
-    createElement("h2", {
+    
+    // Texte principal
+    createElement("div", {
       className: [
-        "text-2xl",
-        "font-bold",
-        "text-gray-800",
-        "mb-4"
+        "text-center",
+        "space-y-2"
       ]
-    }, "WhatsApp Web Clone"),
-    // Message
-    createElement("p", {
-      className: [
-        "text-gray-600",
-        "max-w-md",
-        "text-center"
-      ]
-    }, "Sélectionnez une discussion pour commencer à chatter")
+    }, [
+      createElement("h1", {
+        className: [
+          "text-3xl",
+          "font-light",
+          "text-gray-900"
+        ]
+      }, "WhatsApp Web Clone"),
+      
+      createElement("p", {
+        className: [
+          "text-gray-600",
+          "text-lg"
+        ]
+      }, "Sélectionnez une discussion pour commencer à chatter"),
+      
+      createElement("p", {
+        className: [
+          "text-gray-500",
+          "text-sm",
+          "mt-4"
+        ]
+      }, "Vos messages sont chiffrés de bout en bout")
+    ])
   ]);
 }
