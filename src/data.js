@@ -145,17 +145,48 @@ export function addContact(contactData) {
     nom: uniqueName,
     id: Date.now(),
     archive: false,
-    avatarColor: getRandomColor(), // Ajouter une couleur fixe
+    avatarColor: getRandomColor(),
     heure: new Date().toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
     }),
   };
 
-  // Supprimez la photo s'il y en a une
-  delete newContact.photo;
-
+  // Ajouter le contact à la liste globale
   contacts.push(newContact);
+
+  // Ajouter le contact aux contacts de l'utilisateur connecté
+  if (authState.currentUserData) {
+    authState.currentUserData.contacts.push({
+      ...newContact,
+      dernierMessage: "Nouveau contact",
+      unreadCount: 0
+    });
+
+    // Ajouter l'utilisateur actuel aux contacts du nouveau contact
+    const currentUser = authState.currentUser;
+    if (!users[newContact.email]) {
+      users[newContact.email] = {
+        id: newContact.id,
+        nom: newContact.nom,
+        email: newContact.email,
+        telephone: newContact.telephone,
+        password: newContact.password,
+        contacts: [{
+          id: currentUser.id,
+          nom: currentUser.nom,
+          telephone: currentUser.telephone,
+          email: currentUser.email,
+          dernierMessage: "",
+          heure: "",
+          archive: false,
+          avatarColor: currentUser.avatarColor
+        }],
+        groupes: []
+      };
+    }
+  }
+
   return newContact;
 }
 

@@ -10,11 +10,19 @@ import { sortDiscussionsAlphabetically } from "./utils.js";
 import { getConversationMessages } from "./data.js";
 // ===== LISTES ET DISCUSSIONS =====
 export function createDiscussionsList(onSelectDiscussion) {
-  // Utiliser les contacts de l'utilisateur connecté
+  // Récupérer les contacts de l'utilisateur connecté
   const userContacts = authState.currentUserData.contacts;
   
+  // Filtrer les contacts ayant des messages ou non archivés
   const discussionsWithMessages = userContacts
-    .filter(contact => !contact.archive)
+    .filter(contact => {
+      // Vérifier si la conversation existe
+      const conversationId = `${Math.min(authState.currentUser.id, contact.id)}_${Math.max(authState.currentUser.id, contact.id)}`;
+      const hasConversation = messages.conversations[conversationId]?.messages?.length > 0;
+      
+      // Garder le contact s'il n'est pas archivé et soit a une conversation, soit est un nouveau contact
+      return !contact.archive && (hasConversation || contact.dernierMessage);
+    })
     .map(contact => ({ ...contact, type: "contact" }));
 
   // Ajouter cette ligne pour définir hasDiscussions
@@ -29,7 +37,7 @@ export function createDiscussionsList(onSelectDiscussion) {
     // Afficher tous les contacts et groupes triés alphabétiquement
     itemsToDisplay = sortDiscussionsAlphabetically([
       ...contacts
-        .filter(contact => !contact.archive)
+        .filter(contact => !contact.archive && contact.id !== authState.currentUser.id)
         .map(contact => ({ ...contact, type: "contact" })),
       ...groupes
         .filter(group => !group.archive)
