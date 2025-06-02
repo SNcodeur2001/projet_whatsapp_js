@@ -166,12 +166,12 @@ function selectDiscussion(type, id) {
     currentView: "discussions"
   });
 
-  // Afficher les détails de la discussion
+  // Mettre à jour l'interface
   const headerTitle = document.querySelector("#headerTitle");
   const headerImage = document.querySelector("#headerImage");
   const messagesContainer = document.querySelector("#corpsZoneMessage");
   const messageInput = document.getElementById("messageInput");
-  const sendButton = document.querySelector("button[disabled]");
+  const inputZone = document.querySelector("#inputZoneMessage");
   
   const item = type === "contact" 
     ? getContactById(id)
@@ -184,14 +184,9 @@ function selectDiscussion(type, id) {
       headerImage.style.backgroundImage = `url(${item.photo || "https://via.placeholder.com/40"})`;
     }
     
-    // Activer l'envoi de messages
-    if (messageInput) {
-      messageInput.disabled = false;
-      messageInput.focus();
-    }
-    if (sendButton) {
-      sendButton.disabled = false;
-    }
+    // Activer la zone de message
+    if (messageInput) messageInput.disabled = false;
+    if (inputZone) inputZone.style.display = "flex";
     
     // Afficher les messages
     if (messagesContainer) {
@@ -326,10 +321,11 @@ function updateHeaderActions() {
 
   if (appState.selectedDiscussion) {
     const { type, id } = appState.selectedDiscussion;
-    const isArchived =
-      type === "contact"
-        ? getContactById(id)?.archive
-        : getGroupById(id)?.archive;
+    const item = type === "contact" 
+      ? authState.currentUserData.contacts.find(c => c.id === id)
+      : getGroupById(id);
+
+    const isArchived = item?.archive === true;
 
     // Bouton archiver/désarchiver
     const archiveBtn = createElement(
@@ -349,13 +345,18 @@ function updateHeaderActions() {
         ],
         onclick: () => {
           if (isArchived) {
-            unarchiveDiscussion(type, id);
+            if (unarchiveDiscussion(type, id)) {
+              updateState({ selectedDiscussion: null });
+              updateDiscussionView();
+              showDiscussions(); // Retour à la liste principale
+            }
           } else {
-            archiveDiscussion(type, id);
+            if (archiveDiscussion(type, id)) {
+              updateState({ selectedDiscussion: null });
+              updateDiscussionView();
+              showDiscussions();
+            }
           }
-          updateState({ selectedDiscussion: null });
-          updateDiscussionView();
-          updateHeaderActions();
         },
       },
       [
@@ -683,13 +684,14 @@ const envoyer = createElement(
 const inputZoneMessage = createElement(
   "div",
   {
+    id: "inputZoneMessage",
     className: [
       "w-full",
       "h-[10%]",
       "rounded-br-xl",     
       "py-2",
       "px-2",
-      "flex",
+      "hidden", // Caché par défaut
       "items-center",
       "justify-between",
     ],
@@ -793,6 +795,21 @@ function initializeApp() {
   const body = document.querySelector("body");
   body.innerHTML = "";
   body.append(app);
+
+  // Afficher la vue vide par défaut
+  const messagesContainer = document.querySelector("#corpsZoneMessage");
+  const messageInput = document.getElementById("messageInput");
+  const inputZone = document.querySelector("#inputZoneMessage");
+
+  if (messagesContainer) {
+    messagesContainer.innerHTML = "";
+    messagesContainer.appendChild(createEmptyMessageView());
+  }
+
+  // Désactiver la zone de saisie
+  if (messageInput) messageInput.disabled = true;
+  if (inputZone) inputZone.style.display = "none";
+
   showDiscussions();
 }
 

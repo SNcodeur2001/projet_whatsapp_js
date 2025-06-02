@@ -13,26 +13,25 @@ export function createDiscussionsList(onSelectDiscussion) {
   // Récupérer les contacts de l'utilisateur connecté
   const userContacts = authState.currentUserData.contacts;
   
-  // Filtrer les discussions non archivées
+  // Filtrer les contacts non archivés avec des messages
   const discussionsWithMessages = userContacts
     .filter(contact => {
-      // Si le contact est archivé, ne pas l'inclure
+      // Vérifier strictement si le contact n'est PAS archivé
       if (contact.archive === true) {
         return false;
       }
 
-      // Vérifier si la conversation existe
+      // Vérifier si une conversation existe
       const conversationId = `${Math.min(authState.currentUser.id, contact.id)}_${Math.max(authState.currentUser.id, contact.id)}`;
       const hasConversation = messages.conversations[conversationId]?.messages?.length > 0;
       
-      // Garder uniquement les contacts avec des messages
       return hasConversation || contact.dernierMessage;
     })
     .map(contact => ({ ...contact, type: "contact" }));
 
   // Filtrer les groupes non archivés
   const activeGroups = groupes
-    .filter(group => group.archive === false) // Explicitement false
+    .filter(group => group.archive === false)
     .map(group => ({ ...group, type: "group" }));
 
   // Combiner les discussions actives
@@ -45,7 +44,7 @@ export function createDiscussionsList(onSelectDiscussion) {
   let itemsToDisplay;
 
   if (searchTerm === "*") {
-    // Recherche "*" : tous les contacts non archivés
+    // Pour la recherche "*", afficher tous les contacts non archivés
     itemsToDisplay = sortDiscussionsAlphabetically([
       ...contacts
         .filter(contact => !contact.archive && contact.id !== authState.currentUser.id)
@@ -55,7 +54,7 @@ export function createDiscussionsList(onSelectDiscussion) {
         .map(group => ({ ...group, type: "group" }))
     ]);
   } else {
-    // Affichage normal : uniquement les discussions non archivées
+    // Pour l'affichage normal, utiliser les discussions non archivées
     itemsToDisplay = allDiscussions;
   }
 
@@ -417,12 +416,12 @@ export function createDiscussionsList(onSelectDiscussion) {
 export function createArchivesList(onSelectDiscussion, onBack) {
   // Récupérer les contacts archivés de l'utilisateur connecté
   const archivedContacts = authState.currentUserData.contacts
-    .filter(contact => contact.archive)
+    .filter(contact => contact.archive === true) // Vérification explicite
     .map(contact => ({ ...contact, type: "contact" }));
 
   // Récupérer les groupes archivés
   const archivedGroups = groupes
-    .filter(group => group.archive)
+    .filter(group => group.archive === true)
     .map(group => ({ ...group, type: "group" }));
 
   // Combiner les discussions archivées
@@ -1841,5 +1840,61 @@ export function createLoginForm(onLogin) {
         "Mot de passe: 123456"
       ])
     ])
+  ]);
+}
+
+export function createEmptyMessageView() {
+  return createElement("div", {
+    className: [
+      "w-full",
+      "h-full",
+      "flex",
+      "flex-col",
+      "items-center",
+      "justify-center",
+      "bg-[#f0f2f5]",
+      "text-center",
+      "px-4"
+    ]
+  }, [
+    // Icône
+    createElement("div", {
+      className: [
+        "w-72",
+        "h-72",
+        "mb-8",
+        "rounded-full",
+        "bg-gray-100",
+        "flex",
+        "items-center",
+        "justify-center"
+      ]
+    }, [
+      createElement("i", {
+        className: [
+          "fa-solid",
+          "fa-comments",
+          "text-8xl",
+          "text-gray-300"
+        ]
+      })
+    ]),
+    // Titre
+    createElement("h2", {
+      className: [
+        "text-2xl",
+        "font-bold",
+        "text-gray-800",
+        "mb-4"
+      ]
+    }, "WhatsApp Web Clone"),
+    // Message
+    createElement("p", {
+      className: [
+        "text-gray-600",
+        "max-w-md",
+        "text-center"
+      ]
+    }, "Sélectionnez une discussion pour commencer à chatter")
   ]);
 }

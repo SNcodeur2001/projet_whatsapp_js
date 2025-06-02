@@ -1,4 +1,5 @@
 import { contacts, groupes } from "./data.js";
+import { authState } from "./data.js";
 
 // ===== FONCTIONS UTILITAIRES =====
 export function getContactById(id) {
@@ -10,15 +11,16 @@ export function getGroupById(id) {
 }
 
 export function archiveDiscussion(type, id) {
-  // Vérification uniquement pour votre contact
-  if (type === "contact" && id === 1) {
+  if (type === "contact" && id === authState.currentUser.id) {
     alert("Vous ne pouvez pas vous archiver vous-même");
     return false;
   }
 
-  // Procéder à l'archivage
   if (type === "contact") {
-    const contact = contacts.find(c => c.id === id);
+    // Trouver le contact dans les contacts de l'utilisateur actuel
+    const contact = authState.currentUserData.contacts
+      .find(c => c.id === id);
+    
     if (contact) {
       contact.archive = true;
       return true;
@@ -36,9 +38,14 @@ export function archiveDiscussion(type, id) {
 
 export function unarchiveDiscussion(type, id) {
   if (type === "contact") {
-    const contact = contacts.find(c => c.id === id);
+    // Trouver le contact dans les contacts de l'utilisateur actuel
+    const contact = authState.currentUserData.contacts
+      .find(c => c.id === id);
+    
     if (contact) {
       contact.archive = false;
+      // Mise à jour de l'interface
+      updateDiscussionView();
       return true;
     }
   } else if (type === "group") {
