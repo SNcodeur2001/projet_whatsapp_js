@@ -13,28 +13,39 @@ export function createDiscussionsList(onSelectDiscussion) {
   // Récupérer les contacts de l'utilisateur connecté
   const userContacts = authState.currentUserData.contacts;
   
-  // Filtrer les contacts ayant des messages ou non archivés
+  // Filtrer les discussions non archivées
   const discussionsWithMessages = userContacts
     .filter(contact => {
+      // Si le contact est archivé, ne pas l'inclure
+      if (contact.archive === true) {
+        return false;
+      }
+
       // Vérifier si la conversation existe
       const conversationId = `${Math.min(authState.currentUser.id, contact.id)}_${Math.max(authState.currentUser.id, contact.id)}`;
       const hasConversation = messages.conversations[conversationId]?.messages?.length > 0;
       
-      // Garder le contact s'il n'est pas archivé et soit a une conversation, soit est un nouveau contact
-      return !contact.archive && (hasConversation || contact.dernierMessage);
+      // Garder uniquement les contacts avec des messages
+      return hasConversation || contact.dernierMessage;
     })
     .map(contact => ({ ...contact, type: "contact" }));
 
-  // Ajouter cette ligne pour définir hasDiscussions
-  const hasDiscussions = discussionsWithMessages.length > 0;
+  // Filtrer les groupes non archivés
+  const activeGroups = groupes
+    .filter(group => group.archive === false) // Explicitement false
+    .map(group => ({ ...group, type: "group" }));
 
+  // Combiner les discussions actives
+  const allDiscussions = [...discussionsWithMessages, ...activeGroups];
+
+  // Configuration de la recherche
   const searchInput = document.getElementById("searchInput");
   const searchTerm = searchInput?.value?.trim() || "";
 
   let itemsToDisplay;
 
   if (searchTerm === "*") {
-    // Afficher tous les contacts et groupes triés alphabétiquement
+    // Recherche "*" : tous les contacts non archivés
     itemsToDisplay = sortDiscussionsAlphabetically([
       ...contacts
         .filter(contact => !contact.archive && contact.id !== authState.currentUser.id)
@@ -43,13 +54,12 @@ export function createDiscussionsList(onSelectDiscussion) {
         .filter(group => !group.archive)
         .map(group => ({ ...group, type: "group" }))
     ]);
-  } else if (searchTerm) {
-    // Recherche normale
-    itemsToDisplay = filterDiscussions(searchTerm);
   } else {
-    // Afficher uniquement les discussions avec messages
-    itemsToDisplay = discussionsWithMessages;
+    // Affichage normal : uniquement les discussions non archivées
+    itemsToDisplay = allDiscussions;
   }
+
+  const hasDiscussions = discussionsWithMessages.length > 0;
 
   return createElement("div", { 
     className: [
@@ -405,14 +415,18 @@ export function createDiscussionsList(onSelectDiscussion) {
 }
 
 export function createArchivesList(onSelectDiscussion, onBack) {
-  const archivedItems = [
-    ...contacts
-      .filter((contact) => contact.archive)
-      .map((contact) => ({ ...contact, type: "contact" })),
-    ...groupes
-      .filter((group) => group.archive)
-      .map((group) => ({ ...group, type: "group" })),
-  ];
+  // Récupérer les contacts archivés de l'utilisateur connecté
+  const archivedContacts = authState.currentUserData.contacts
+    .filter(contact => contact.archive)
+    .map(contact => ({ ...contact, type: "contact" }));
+
+  // Récupérer les groupes archivés
+  const archivedGroups = groupes
+    .filter(group => group.archive)
+    .map(group => ({ ...group, type: "group" }));
+
+  // Combiner les discussions archivées
+  const archivedItems = [...archivedContacts, ...archivedGroups];
 
   return createElement("div", { 
     className: [
